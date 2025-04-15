@@ -1,6 +1,5 @@
 import argparse
-import os, glob
-from io import StringIO
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,57 +7,39 @@ import rdkit.Chem
 import seaborn as sns
 from sklearn.manifold import TSNE
 
-import ase
-from ase.io import read
 
-from rdkit.Chem.rdmolfiles import MolFromXYZBlock, MolFromSmiles
+from rdkit.Chem.rdmolfiles import MolFromSmiles
 from rdkit.Chem import rdFingerprintGenerator
-
-
-def atoms_to_xyz_str(atoms: ase.Atoms):
-  f = StringIO()
-  atoms.write(f, format="xyz")
-  return f.getvalue()
 
 def moltoFPS(mol: rdkit.Chem.Mol):
     try:
-        fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2)
-        fps = fpgen.GetFingerprint(mol)
-        return fps
+        fpgen = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
+        fps1 = fpgen.GetFingerprint(mol)
+        return list(fps1)
+
     except:
         print('Exception!')
 
-def xyztoFPS(xyz):
-    atoms = read(xyz)
-    mol = MolFromXYZBlock(atoms_to_xyz_str(atoms))
-    fps = moltoFPS(mol)
-    return fps
-
 def smilestoFPS(smiles_csv) -> list:
-    df = pd.read_csv(smiles_csv)
+    df = pd.read_csv(smiles_csv).head(200)
     smiles = df['SMILES']
-    fps = [moltoFPS(MolFromSmiles(smi)) for smi in smiles]
-    return fps
+    fps2 = []
+    for smi in smiles:
+        try:
+            mol = MolFromSmiles(smi)
+            fp = moltoFPS(mol)
+            if fp is not None:
+                fps2.append(fp)
+        except:
+            print('Exception')
+    return fps2
 
 def inputtoFPS(input_path: str, fps_dict: dict):
-    fps = []
-    if os.path.isdir(input_path):
-        name = os.path.basename(input_path)
-        xyz = glob.glob(os.path.join(input_path, '*.xyz'))
-        for f in xyz:
-            fp = xyztoFPS(f)
-            fps.append(fp)
-        fps_dict[name] = np.array(fps)
-        return fps_dict
-
-    elif os.path.isfile(input_path):
-        name = os.path.basename(input_path)[0]
-        fps.append(smilestoFPS(input_path))
-        fps_dict[name] = np.array(fps)
-        return fps_dict
-
-    else:
-        print(f"Input {input_path} is neither file nor file path")
+    name = os.path.basename(input_path).split('.')[0]
+    print(name)
+    fps_ = np.array(smilestoFPS(input_path))
+    fps_dict[name] = fps_
+    return fps_dict
 
 if __name__ == '__main__':
     def parse_cmd():
@@ -78,15 +59,16 @@ if __name__ == '__main__':
         fps_dict = {}
         for file in file_paths:
             fps_dict = inputtoFPS(file, fps_dict)
+            print(f'{file} done')
 
         tsne = TSNE(n_components=2, perplexity=30, init="pca")
         for label, fps in fps_dict.items():
             embedding = tsne.fit_transform(fps)
             sns.scatterplot(x=embedding[:,0], y=embedding[:,1], label=label)
+            plt.legend()
 
-        plt.legend()
-        plt.savefig('./test_t-sne.png')
-        print("Plot generated")
+        plt.savefig('./test_tsne.png')
+        print("Plot generated!")
 
     else:
         print("No files supplied!")
