@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import rdkit.Chem
 import seaborn as sns
+from matplotlib.pyplot import tight_layout
 from sklearn.manifold import TSNE
 
 
@@ -21,7 +22,7 @@ def moltoFPS(mol: rdkit.Chem.Mol):
         print('Exception!')
 
 def smilestoFPS(smiles_csv) -> list:
-    df = pd.read_csv(smiles_csv).head(200)
+    df = pd.read_csv(smiles_csv)
     smiles = df['SMILES']
     fps2 = []
     for smi in smiles:
@@ -36,7 +37,6 @@ def smilestoFPS(smiles_csv) -> list:
 
 def inputtoFPS(input_path: str, fps_dict: dict):
     name = os.path.basename(input_path).split('.')[0]
-    print(name)
     fps_ = np.array(smilestoFPS(input_path))
     fps_dict[name] = fps_
     return fps_dict
@@ -55,19 +55,31 @@ if __name__ == '__main__':
     cmd_args = parse_cmd()
     file_paths = cmd_args.file_paths
 
-    if len(file_paths)!=0:
+    n_files = len(file_paths)
+
+    if n_files != 0:
         fps_dict = {}
         for file in file_paths:
             fps_dict = inputtoFPS(file, fps_dict)
             print(f'{file} done')
 
-        tsne = TSNE(n_components=2, perplexity=30, init="pca")
+        fig, ax = plt.subplots(1,1, figsize=(12,12), tight_layout=True)
+        palette = sns.color_palette("bright")
+        label_colors = dict(zip(fps_dict.keys(), palette))
+
+        tsne = TSNE(n_components=2,
+                    perplexity=60,
+                    init="pca",
+                    random_state=42)
+
         for label, fps in fps_dict.items():
             embedding = tsne.fit_transform(fps)
-            sns.scatterplot(x=embedding[:,0], y=embedding[:,1], label=label)
+            color = label_colors[label]
+            sns.scatterplot(x=embedding[:,0], y=embedding[:,1], label=label, color=color, alpha=0.5)
             plt.legend()
 
-        plt.savefig('./test_tsne.png')
+        plt.title("t-SNE visualization of various datasets")
+        plt.savefig('./test-tsne.png')
         print("Plot generated!")
 
     else:
