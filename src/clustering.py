@@ -1,9 +1,7 @@
 import os
-
-from rdkit.DataManip.Metric.rdMetricMatrixCalc import GetTanimotoDistMat
 import argparse
-import numpy as np
-from utils.fingerprints import calcfps
+from utils.utils import calcfps, calcIntDiv
+
 #Calculate internal diversity first then plot clustering
 
 def parse_cmd():
@@ -16,15 +14,17 @@ def parse_cmd():
 
     return parser.parse_args()
 
-
 cmd_args = parse_cmd()
 file_paths = cmd_args.file_paths
+div_dict = {}
 
 for file in file_paths:
-    name = os.path.basename(file).split('.')[0]
+    fname = os.path.basename(file).split('.')[0]
     fps_list = calcfps(file, bitVectObj=True)
+    div = calcIntDiv(fps_list)
+    div_dict[fname] = div
+    print(f"Internal diversity of {fname} dataset: {div:.3f}")
 
-    dist_mat = GetTanimotoDistMat(fps_list)
-    int_div = np.mean(np.array(dist_mat))
-    print(f"Dataset {file} has an internal diversity of {int_div}")
-
+with open('Generative-FLP/data/plots/internal_diversity.txt', 'w') as f:
+    for fname, div in div_dict.items():
+        f.write(f"{fname}: {div:.3f} \n")
