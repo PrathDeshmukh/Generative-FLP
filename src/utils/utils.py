@@ -2,6 +2,7 @@
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator, MolFromSmiles
+from rdkit.DataStructs.cDataStructs import TanimotoSimilarity, ExplicitBitVect
 
 
 def calcfps(dataset: str,
@@ -45,3 +46,28 @@ def calcfps(dataset: str,
     print(f"Total fingerprints calculated: {len(fps_list)}")
 
     return fps_list
+
+def calcIntDiv(fps_list: list) -> float:
+    """
+    Calculation of internal diversity of a dataset by Tanimoto distance metric
+    Args:
+        fps_list: Python list of fingerprints as bit vector objects
+
+    Returns:
+        intDiv: Internal diversity
+    """
+    nfps = len(fps_list)
+    if fps_list and not isinstance(fps_list[0], ExplicitBitVect):
+        raise TypeError("Excpected fingerprints as bit vector objects")
+
+    dist_sum = 0
+    count = 0
+
+    for i in range(nfps):
+        for j in range(i+1, nfps - 1):
+            dist = TanimotoSimilarity(fps_list[i], fps_list[j], returnDistance=True)
+            dist_sum += dist
+            count += 1
+
+    intDiv = dist_sum / count
+    return intDiv
