@@ -4,8 +4,10 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.pyplot import tight_layout
+from rdkit import Chem
 from rdkit.Chem import rdMolDescriptors as rdmd
-from rdkit.Chem.rdmolfiles import MolFromSmiles
+from utils.utils import calcVolume
+#from rdkit.Chem.rdmolfiles import MolFromSmiles
 import argparse
 
 
@@ -24,8 +26,8 @@ properties = {
     'nhta':rdmd.CalcNumHeteroatoms,
     'nar' :rdmd.CalcNumAromaticRings,
     'nalr':rdmd.CalcNumAliphaticRings,
-    'fsp3':rdmd.CalcFractionCSP3
-    #'vdwv':[]
+    'fsp3':rdmd.CalcFractionCSP3,
+    'vdwv':calcVolume
 }
 
 #property names for plots
@@ -34,13 +36,14 @@ prop_names = {
     'nhta':'Num Hetero atoms',
     'nar' :'Num Aromatic Rings',
     'nalr':'Num Aliphatic Rings',
-    'fsp3':'Fraction CSP3'
+    'fsp3':'Fraction CSP3',
+    'vdwv':'Spatial Volume'
 }
 
 #function to calculate all the properties for a given SMILES string
 def calc_props(smi: str):
     try:
-        mol = MolFromSmiles(smi)
+        mol = Chem.MolFromSmiles(smi)
         if mol is not None:
             mol.UpdatePropertyCache()
             return {prop: func(mol) for prop, func in properties.items()}
@@ -76,7 +79,7 @@ def main():
     #plotting histograms
     fig, axs = plt.subplots(3,2, figsize=(15,15), tight_layout=True)
     axes = axs.flatten()
-    fig.delaxes(axes[-1]) #remove unused sixth plot
+    #fig.delaxes(axes[-1]) #remove unused sixth plot
 
     palette = sns.color_palette("bright")
     label_colors = dict(zip(all_props_dict.keys(), palette))
@@ -97,7 +100,7 @@ def main():
                frameon=False)
 
     plt.tight_layout(rect=[0.0, 0.0, 1.0, 0.95])
-    plt.savefig('./data/properties_histogram.png')
+    plt.savefig('Generative-FLP/data/plots/properties_histogram.png')
     print("Plot generated!")
 
 if __name__=='__main__':
