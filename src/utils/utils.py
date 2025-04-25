@@ -1,9 +1,10 @@
 #Script for generating dataset levels features, properties, fingerprints, etc.
 import pandas as pd
 from rdkit import Chem
-from rdkit.Chem import rdFingerprintGenerator, MolFromSmiles
+from rdkit.Chem import rdFingerprintGenerator
 from rdkit.DataStructs.cDataStructs import TanimotoSimilarity, ExplicitBitVect
-
+from rdkit.Chem import AllChem
+from rdkit.Chem.rdchem import Mol
 
 def calcfps(dataset: str,
             radius: int=2,
@@ -21,24 +22,17 @@ def calcfps(dataset: str,
     """
     df = pd.read_csv(dataset)
     smiles = df['SMILES']
-    mols = []
-    for smi in smiles:
-        try:
-            mol = MolFromSmiles(smi)
-            if mol is not None:
-                mols.append(mol)
-        except Exception as e:
-            print(e)
-
     fpsgen = rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=fps_size)
     fps_list = []
-    for mol in mols:
-        try:
-            fps = fpsgen.GetFingerprint(mol)
-            if bitVectObj is False:   #Converts the fingerprint vector to Python list
-                fps = fps.ToList()
-            fps_list.append(fps)
 
+    for smi in smiles:
+        try:
+            mol = Chem.MolFromSmiles(smi)
+            if mol is not None:
+                fps = fpsgen.GetFingerprint(mol)
+                if bitVectObj is False:  # Converts the fingerprint vector to Python list
+                    fps = fps.ToList()
+                fps_list.append(fps)
         except Exception as e:
             print(e)
 
@@ -71,3 +65,18 @@ def calcIntDiv(fps_list: list) -> float:
 
     intDiv = dist_sum / count
     return intDiv
+
+
+def calcVolume(mol: Mol) -> float:
+    """
+    Calculates spatial volume of the molecule
+    Args:
+         mol: RDKit Mol object
+
+    Returns:
+        volume: Volume of the molecule
+    """
+    mol_H = Chem.AddHs(mol)
+    AllChem.EmbedMolecule(mol_H)
+    volume = AllChem.ComputeMolVolume(mol_H)
+    return volume
