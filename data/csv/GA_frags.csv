@@ -177,7 +177,7 @@ N1ccc(=O)cc1
 N1C2CCC1(CC2)
 N1CCCN2CCCNC12
 N1CCCN2CCCCCC12
-/N=N\
+[H]/N=N\[H]
 N([H])N([H])
 C([H])([H])
 C(=C([H])C([H]))
