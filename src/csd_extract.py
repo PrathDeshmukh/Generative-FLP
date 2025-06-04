@@ -1,11 +1,9 @@
+#Extraction of FLP molecules from CSD based on pre-defined backbones
 import ccdc.search
 from ccdc import io
 from ccdc.molecule import Molecule
 import pickle
 import pandas as pd
-
-#csd = io.MoleculeReader('CSD')
-#mol = csd.molecule('MOYLOC')
 
 csv_path = '/home/pratham/Desktop/backbones_seed_CSD.csv'
 df = pd.read_csv(csv_path)
