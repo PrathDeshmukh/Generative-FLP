@@ -10,7 +10,8 @@ from rdkit.Chem import AllChem, Get3DDistanceMatrix, rdmolfiles
 from scipy.spatial import distance
 from skspatial.objects import Plane, Points
 
-from src.calc_utils import angle_between, cleanup_mol, get_dft_E, unit_vector, xtb_opt
+from src.calc_utils import angle_between, cleanup_mol, get_dft_E, unit_vector, xtb_opt, xtb_opt_
+from src.smiles_cleaning import save_path
 
 
 def chromosome_to_smiles():
@@ -341,11 +342,13 @@ class IFLP:
         level: int = 2,
         verb: int = 0,
         label: int = 0,
+        save_folder: str="/home/ppdeshmu/Generative-FLP/data/xyz"
     ):
         self.threshold = threshold
         self.level = level
         self.verb = verb
         self.label = label
+        self.save_folder = save_folder
 
     def get_IFLP(self, smiles: str) -> Chem.Mol:
         """
@@ -645,11 +648,14 @@ class IFLP:
         E_HYDRIDE = -0.610746694539
         h2kcal = 627.509
 
+        mol_FLP = Chem.AddHs(mol_FLP)
+        AllChem.EmbedMolecule(mol_FLP)
+
+        conf = mol_FLP.GetConformer()
+        coords = conf.GetPositions()
+
         dist_matrix = Get3DDistanceMatrix(mol_FLP)
         cm = Chem.rdmolops.GetAdjacencyMatrix(mol_FLP)
-
-        for c in mol_FLP.GetConformers():
-            coords = c.GetPositions()
 
         _, crd_B, crd_N = get_shortest_BN_distance(mol_FLP, dist_matrix, self.threshold)
         z = [atom.GetAtomicNum() for atom in mol_FLP.GetAtoms()]
@@ -662,48 +668,61 @@ class IFLP:
                 )
             raise ValueError("Fail to generate H positions")
         else:
-            rdmolfiles.MolToXYZFile(mol_FLP, f"Hoshiyomi_{self.label}.xyz")
-            E_iflp = get_dft_E(f"Hoshiyomi_{self.label}.xyz", self.label)
+            init_xyz_path = os.path.join(self.save_folder, f"/initial_FLP/{self.label}.xyz")
+            rdmolfiles.MolToXYZFile(mol_FLP, init_xyz_path)
+
+            opt_flp_path = xtb_opt_(init_xyz_path, self.save_folder, charge=0)
+
+            E_iflp = get_dft_E(opt_flp_path, self.label)
+
             ha_pos = f"H  {H_a[0]}   {H_a[1]}   {H_a[2]}\n"
             hb_pos = f"H  {H_b[0]}   {H_b[1]}   {H_b[2]}"
 
-            with open(f"Hoshiyomi_{self.label}.xyz", "r") as f:
+            with open(init_xyz_path, "r") as f:
                 contents = f.readlines()
+
             contents_b = contents.copy()
 
             # FEHA
             contents.append(ha_pos)
             contents[0] = str(len(contents[2:])) + "\n"
-            with open(f"Hoshiyomi_FLP_B_{self.label}.xyz", "w") as f:
-                f.writelines(contents)
-            xtb_opt(f"Hoshiyomi_FLP_B_{self.label}.xyz", level=self.level, charge=-1)
 
-            mol_BH = Chem.rdmolfiles.MolFromMolFile(
-                "xtbtopo.mol", removeHs=False, sanitize=False
-            )
+            flp_BH_path = os.path.join(self.save_folder, f"/initial_FLP/FLP_BH_{self.label}.xyz")
+
+            with open(flp_BH_path, "w") as f:
+                f.writelines(contents)
+
+            opt_BH_path = xtb_opt_(flp_BH_path, self.save_folder, charge=-1)
+
+            mol_BH = rdmolfiles.MolFromXYZFile(opt_BH_path)
+
             dist_matrix_FLPH2 = Get3DDistanceMatrix(mol_BH)
             ntot = mol_BH.GetNumAtoms()
-            d_nh = dist_matrix_FLPH2[ntot - 1, crd_B]
-            if d_nh > 1.5:
+
+            d_bh = dist_matrix_FLPH2[ntot - 1, crd_B]
+            if d_bh > 1.5:
                 if self.verb > 0:
                     logging.error(
                         f"Fail to generate relaxed FLP-BH for {Chem.MolToSmiles(mol_FLP)}"
                     )
                 raise ValueError("Fail to generate relaxed FLP-BH")
 
-            E_iflp_b = get_dft_E(f"Hoshiyomi_FLP_B_{self.label}_xtbopt.xyz", self.label, charge=-1)
+            E_iflp_b = get_dft_E(opt_BH_path, self.label, charge=-1)
             feha = (E_iflp_b - E_iflp - E_HYDRIDE) * h2kcal
 
             # FEPA
             contents_b.append(hb_pos)
             contents_b[0] = str(len(contents_b[2:])) + "\n"
-            with open(f"Hoshiyomi_FLP_N_{self.label}.xyz", "w") as f:
-                f.writelines(contents_b)
-            xtb_opt(f"Hoshiyomi_FLP_N_{self.label}.xyz", level=self.level, charge=1)
 
-            mol_NH = Chem.rdmolfiles.MolFromMolFile(
-                "xtbtopo.mol", removeHs=False, sanitize=False
-            )
+            flp_NH_path = os.path.join(self.save_folder, f"/initial_FLP/FLP_NH_{self.label}.xyz")
+
+            with open(flp_NH_path, "w") as f:
+                f.writelines(contents_b)
+
+            opt_NH_path = xtb_opt_(flp_NH_path, self.save_folder, charge=1)
+
+            mol_NH = rdmolfiles.MolFromXYZFile(opt_NH_path)
+
             dist_matrix_FLPH2 = Get3DDistanceMatrix(mol_NH)
             ntot = mol_NH.GetNumAtoms()
             d_nh = dist_matrix_FLPH2[ntot - 1, crd_N]
@@ -714,7 +733,7 @@ class IFLP:
                     )
                 raise ValueError("Fail to generate relaxed FLP-NH")
 
-            E_iflp_n = get_dft_E(f"Hoshiyomi_FLP_N_{self.label}_xtbopt.xyz", self.label, charge=1)
+            E_iflp_n = get_dft_E(opt_NH_path, self.label, charge=1)
             fepa = (E_iflp_n - E_iflp - E_PROTON) * h2kcal
         return fepa, feha
 
