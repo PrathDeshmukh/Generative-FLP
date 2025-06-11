@@ -203,8 +203,8 @@ def get_shortest_BN_distance(
     if valid_distances.size > 0:
         best_dist = np.min(valid_distances)
         bn_idxs = np.where(dist_matrix == best_dist)
-        crd_B = bn_idxs[0][0] if bn_idxs[0].size > 0 else None
-        crd_N = bn_idxs[1][0] if bn_idxs[1].size > 0 else None
+        crd_N = bn_idxs[0][0] if bn_idxs[0].size > 0 else None
+        crd_B = bn_idxs[1][0] if bn_idxs[1].size > 0 else None
         return best_dist, crd_B, crd_N
     else:
         return None, None, None
@@ -349,6 +349,7 @@ class IFLP:
         self.verb = verb
         self.label = label
         self.save_folder = save_folder
+        self.mol_relaxed_xyz = None
 
     def get_IFLP(self, smiles: str) -> Chem.Mol:
         """
@@ -392,9 +393,7 @@ class IFLP:
         os.remove("xtbtopo.mol")
         return mol_FLP_s
 
-    def gen_relaxed_FLP_H2(
-        self, smiles: str
-    ) -> Tuple[Optional[Chem.Mol], Optional[Chem.Mol]]:
+    def gen_relaxed_FLP_H2(self) -> Tuple[Optional[Chem.Mol], Optional[Chem.Mol]]:
         """
         Generate a relaxed IFLP (HB---NH intermediate without hydrogen).
 
@@ -407,8 +406,9 @@ class IFLP:
         If generation fails, (None, None) is returned for both.
         """
 
+        mol_FLP = self.init_mol_obj
+        smiles = Chem.MolToSmiles(mol_FLP)
         try:
-            mol_FLP = self.get_IFLP(smiles)
             if mol_FLP is None:
                 return None
             dist_matrix = Get3DDistanceMatrix(mol_FLP)
@@ -418,11 +418,13 @@ class IFLP:
                     f"Fail to generate mol and/or distance matrix for {smiles}, return None"
                 )
             return None, None
+
         _, crd_B, crd_N = get_shortest_BN_distance(mol_FLP, dist_matrix, self.threshold)
         cm = Chem.rdmolops.GetAdjacencyMatrix(mol_FLP)
         z = [atom.GetAtomicNum() for atom in mol_FLP.GetAtoms()]
-        for c in mol_FLP.GetConformers():
-            coords = c.GetPositions()
+
+        conf = mol_FLP.GetConformer()
+        coords = conf.GetPositions()
 
         H_a, H_b = get_H2_pos(z, crd_B, crd_N, cm, coords, self.verb)
         if (H_a is None) or (H_b is None):
@@ -682,6 +684,18 @@ class IFLP:
                 contents = f.readlines()
 
             contents_b = contents.copy()
+            contents_c = contents.copy()
+
+            #Generate and relax intermediate 2 of FLP
+            contents_c.append(ha_pos)
+            contents_c.append(hb_pos)
+
+            flp_h2_path = os.path.join(self.save_folder, f"/initial_FLP/FLP_H2_{self.label}.xyz")
+            with open(flp_h2_path, "w") as f:
+                f.writelines(contents_c)
+
+            opt_flp_h2_path = xtb_opt_(flp_h2_path, self.save_folder, charge=0)
+            self.mol_relaxed_xyz = opt_flp_h2_path
 
             # FEHA
             contents.append(ha_pos)
@@ -737,7 +751,7 @@ class IFLP:
             fepa = (E_iflp_n - E_iflp - E_PROTON) * h2kcal
         return fepa, feha
 
-    def geom_targets(self, mol_relaxed: Chem.Mol) -> List[float]:
+    def geom_targets(self) -> List[float]:
         """
         Calculate geometric properties of a relaxed molecule.
 
@@ -749,10 +763,13 @@ class IFLP:
         If the calculation fails, an appropriate exception is raised.
         """
         try:
+            mol_relaxed = Chem.MolFromXYZFile(self.mol_relaxed_xyz)
             dist_matrix = Get3DDistanceMatrix(mol_relaxed)
             cm = Chem.rdmolops.GetAdjacencyMatrix(mol_relaxed)
-            for c in mol_relaxed.GetConformers():
-                coords = c.GetPositions()
+
+            conf = mol_relaxed.GetConformer()
+            coords = conf.GetPositions()
+
             best_dist, crd_B, crd_N = get_shortest_BN_distance(
                 mol_relaxed, dist_matrix, self.threshold
             )
