@@ -321,8 +321,8 @@ class IFLP:
 
             E_iflp = get_dft_E(opt_flp_path, self.label)
 
-            ha_pos = f"H  {H_a[0]}   {H_a[1]}   {H_a[2]}\n"
-            hb_pos = f"H  {H_b[0]}   {H_b[1]}   {H_b[2]}"
+            ha_pos = f"H {H_a[0]:13.6f}{H_a[1]:12.6f}{H_a[2]:12.6f}\n"
+            hb_pos = f"H {H_b[0]:13.6f}{H_b[1]:12.6f}{H_b[2]:12.6f}"
 
             with open(init_xyz_path, "r") as f:
                 contents = f.readlines()
@@ -334,8 +334,9 @@ class IFLP:
             contents_c.append(ha_pos)
             contents_c.append(hb_pos)
 
-            flp_h2_path = os.path.join(self.save_folder, f"/initial_FLP/FLP_H2_{self.label}.xyz")
+            flp_h2_path = os.path.join(self.save_folder, f"initial_FLP/FLP_H2_{self.label}.xyz")
             with open(flp_h2_path, "w") as f:
+                contents_c[0] = str(len(contents_c[2:])) + "\n"
                 f.writelines(contents_c)
 
             opt_flp_h2_path = xtb_opt_(flp_h2_path, self.save_folder, charge=0)
@@ -345,7 +346,7 @@ class IFLP:
             contents.append(ha_pos)
             contents[0] = str(len(contents[2:])) + "\n"
 
-            flp_BH_path = os.path.join(self.save_folder, f"/initial_FLP/FLP_BH_{self.label}.xyz")
+            flp_BH_path = os.path.join(self.save_folder, f"initial_FLP/FLP_BH_{self.label}.xyz")
 
             with open(flp_BH_path, "w") as f:
                 f.writelines(contents)
@@ -372,7 +373,7 @@ class IFLP:
             contents_b.append(hb_pos)
             contents_b[0] = str(len(contents_b[2:])) + "\n"
 
-            flp_NH_path = os.path.join(self.save_folder, f"/initial_FLP/FLP_NH_{self.label}.xyz")
+            flp_NH_path = os.path.join(self.save_folder, f"initial_FLP/FLP_NH_{self.label}.xyz")
 
             with open(flp_NH_path, "w") as f:
                 f.writelines(contents_b)
