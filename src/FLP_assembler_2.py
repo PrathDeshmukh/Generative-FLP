@@ -174,21 +174,30 @@ def assembler(backbone: str, fragment_repo: dict) -> Mol:
 if __name__ == "__main__":
     csv_path = './FLP_fragments_list.csv'
     df = pd.read_csv(csv_path)
-    random.seed(42)
+    seed_list = range(50)
 
     #Remove NaN cells from the dataframe
     clean_dict = {col_name: df[col_name].dropna().to_list() for col_name in df.columns}
 
-    backbones = clean_dict['backbone']
-    assembled_smiles = []
-    for bb in backbones:
-        try:
-            mol = assembler(bb, clean_dict)
-            smi = Chem.MolToSmiles(mol)
-            assembled_smiles.append(smi)
-        except Exception as e:
-            print(f"Exception {e} in SMILES {bb}")
+    assembled_flp = {'SMILES': []}
 
-    print(f"Total assembled SMILES: {len(assembled_smiles)}")
-    save_csv = pd.DataFrame({'SMILES': assembled_smiles})
+    for s in seed_list:
+        random.seed(s)
+
+        backbones = clean_dict['backbone']
+        assembled_smiles = []
+        for bb in backbones:
+            try:
+                mol = assembler(bb, clean_dict)
+                smi = Chem.MolToSmiles(mol)
+                canon_smiles = Chem.CanonSmiles(smi)
+                assembled_smiles.append(canon_smiles)
+            except Exception as e:
+                print(f"Exception {e} in SMILES {bb}")
+
+        rm_duplicates = set(assembled_smiles)
+        print(f"Total assembled SMILES: {len(rm_duplicates)} for seed: {s}")
+        assembled_flp['SMILES'].extend(list(rm_duplicates))
+
+    save_csv = pd.DataFrame(assembled_flp)
     save_csv.to_csv('./assembled_FLP.csv')
