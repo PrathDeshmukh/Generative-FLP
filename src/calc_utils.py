@@ -73,6 +73,15 @@ def xtb_opt_(xyz, save_folder, charge: int):
     atoms.write(save_path)
     return save_path
 
+def get_lewis_h_dist(xyz, lewis_idx):
+    atoms = read(xyz)
+    pos = atoms.get_positions()
+    H_pos = pos[-1]
+    lewis_pos = pos[lewis_idx]
+
+    dist = np.linalg.norm(lewis_pos - H_pos)
+    return dist
+
 if __name__ == '__main__':
     xyz1 = '/home/ppdeshmu/test_xyz.xyz'
     test_e = get_dft_E(xyz=xyz1, label='0')

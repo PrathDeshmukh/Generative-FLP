@@ -8,7 +8,7 @@ from rdkit.Chem import AllChem, Get3DDistanceMatrix, rdmolfiles
 from scipy.spatial import distance
 from skspatial.objects import Plane, Points
 
-from calc_utils import angle_between, get_dft_E, unit_vector, xtb_opt_
+from calc_utils import angle_between, get_dft_E, unit_vector, xtb_opt_, get_lewis_h_dist
 
 
 def calculate_angle(
@@ -320,8 +320,6 @@ class IFLP:
 
             opt_flp_path = xtb_opt_(init_xyz_path, self.save_folder, charge=0)
 
-            #E_iflp = get_dft_E(opt_flp_path, self.label)
-
             ha_pos = f"H {H_a[0]:13.6f}{H_a[1]:12.6f}{H_a[2]:12.6f}\n"
             hb_pos = f"H {H_b[0]:13.6f}{H_b[1]:12.6f}{H_b[2]:12.6f}"
 
@@ -354,12 +352,8 @@ class IFLP:
 
             opt_BH_path = xtb_opt_(flp_BH_path, self.save_folder, charge=-1)
 
-            mol_BH = rdmolfiles.MolFromXYZFile(opt_BH_path)
+            d_bh = get_lewis_h_dist(opt_BH_path, crd_B)
 
-            dist_matrix_FLPH2 = Get3DDistanceMatrix(mol_BH)
-            ntot = mol_BH.GetNumAtoms()
-
-            d_bh = dist_matrix_FLPH2[ntot - 1, crd_B]
             if d_bh > 1.5:
                 if self.verb > 0:
                     logging.error(
@@ -378,17 +372,15 @@ class IFLP:
 
             opt_NH_path = xtb_opt_(flp_NH_path, self.save_folder, charge=1)
 
-            mol_NH = rdmolfiles.MolFromXYZFile(opt_NH_path)
-
-            dist_matrix_FLPH2 = Get3DDistanceMatrix(mol_NH)
-            ntot = mol_NH.GetNumAtoms()
-            d_nh = dist_matrix_FLPH2[ntot - 1, crd_N]
+            d_nh = get_lewis_h_dist(opt_NH_path, crd_N)
             if d_nh > 1.5:
                 if self.verb > 0:
                     logging.error(
                         f"Fail to generate relaxed FLP-NH for {Chem.MolToSmiles(mol_FLP)}, return 1e10, 1e10"
                     )
                 raise ValueError("Fail to generate relaxed FLP-NH")
+
+            #E_iflp = get_dft_E(opt_flp_path, self.label)
 
             #E_iflp_b = get_dft_E(opt_BH_path, self.label, charge=-1)
             #feha = (E_iflp_b - E_iflp - E_HYDRIDE) * h2kcal
