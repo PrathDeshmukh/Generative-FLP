@@ -1,7 +1,5 @@
 import logging
 import os
-import shutil
-import subprocess as sp
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -10,8 +8,7 @@ from rdkit.Chem import AllChem, Get3DDistanceMatrix, rdmolfiles
 from scipy.spatial import distance
 from skspatial.objects import Plane, Points
 
-from src.calc_utils import angle_between, cleanup_mol, get_dft_E, unit_vector, xtb_opt, xtb_opt_
-from src.smiles_cleaning import save_path
+from calc_utils import angle_between, get_dft_E, unit_vector, xtb_opt_
 
 
 def calculate_angle(
@@ -96,14 +93,14 @@ def calculate_angle(
 
 
 def get_shortest_BN_distance(
-    mol: Chem.Mol, dist_matrix: np.ndarray, threshold: float
-) -> Tuple[Optional[float], Optional[int], Optional[int]]:
+    mol: Chem.Mol, coords: np.ndarray, threshold: float
+) -> Tuple[float|None, int|None, int|None]:
     """
     Calculate the shortest B-N distance above a specified threshold.
 
     Parameters:
     - mol (Chem.Mol): The molecular structure.
-    - dist_matrix (np.ndarray): The distance matrix.
+    - coords (np.ndarray): The coordinates of all atoms in the molecule.
     - threshold (float): The threshold for considering B-N distances.
 
     Returns:
@@ -112,25 +109,30 @@ def get_shortest_BN_distance(
         - int or None: The index of the boron (B) atom corresponding to the shortest distance, or None if not found.
         - int or None: The index of the nitrogen (N) atom corresponding to the shortest distance, or None if not found.
     """
-    N_index = []
-    B_index = []
+    B_dict = {}
+    N_dict = {}
 
-    for i, atom in enumerate(mol.GetAtoms(), start=1):
+    for atom, c in zip(mol.GetAtoms(), coords):
         if atom.GetAtomicNum() == 5:
-            B_index.append(i)
+            B_dict[atom.GetIdx()] = c
         elif atom.GetAtomicNum() == 7:
-            N_index.append(i)
+            N_dict[atom.GetIdx()] = c
 
-    BN_list = np.asarray([dist_matrix[i - 1, j - 1] for j in B_index for i in N_index])
+    BN_dist_idx = {}
 
-    valid_distances = BN_list[BN_list > threshold]
+    for bidx, bpos in B_dict.items():
+        for nidx, npos in N_dict.items():
+            dist = np.linalg.norm(bpos - npos)
+            if dist > threshold:
+                BN_dist_idx[dist] = (bidx, nidx)
+            else:
+                continue
 
-    if valid_distances.size > 0:
-        best_dist = np.min(valid_distances)
-        bn_idxs = np.where(dist_matrix == best_dist)
-        crd_N = bn_idxs[0][0] if bn_idxs[0].size > 0 else None
-        crd_B = bn_idxs[1][0] if bn_idxs[1].size > 0 else None
-        return best_dist, crd_B, crd_N
+
+    min_dist = min(BN_dist_idx.keys())
+    if min_dist:
+        crd_B, crd_N = BN_dist_idx[min_dist]
+        return min_dist, crd_B, crd_N
     else:
         return None, None, None
 
@@ -225,7 +227,7 @@ def get_H2_pos(
     subs_acid = []
     for n, j in enumerate(cm[crd_B, :]):
         if j == 1:
-            # if the adjacant atom is not H(which will be the substrate
+            # if the adjacent atom is not H(which will be the substrate
             # atoms)
             if z[n] != 1:
                 pos = coords[n]
@@ -242,8 +244,8 @@ def get_H2_pos(
             n2 = -n1
             H_a1 = n1 * 1.2
             H_a2 = n2 * 1.2
-            d1 = distance.euclidean(H_a1, coords[crd_B, :])
-            d2 = distance.euclidean(H_a2, coords[crd_B, :])
+            d1 = distance.euclidean(H_a1, coords[crd_N, :])
+            d2 = distance.euclidean(H_a2, coords[crd_N, :])
             if d1 < d2:
                 vec_a = H_a1
             else:
@@ -290,8 +292,8 @@ class IFLP:
         If the calculation fails, (1e10, 1e10) is returned for both.
         """
 
-        E_PROTON = 0.229552166667
-        E_HYDRIDE = -0.610746694539
+        E_PROTON = 0.00
+        E_HYDRIDE = -0.527751
         h2kcal = 627.509
 
         mol_FLP = Chem.AddHs(mol_FLP)
@@ -300,10 +302,9 @@ class IFLP:
         conf = mol_FLP.GetConformer()
         coords = conf.GetPositions()
 
-        dist_matrix = Get3DDistanceMatrix(mol_FLP)
         cm = Chem.rdmolops.GetAdjacencyMatrix(mol_FLP)
 
-        _, crd_B, crd_N = get_shortest_BN_distance(mol_FLP, dist_matrix, self.threshold)
+        _, crd_B, crd_N = get_shortest_BN_distance(mol_FLP, coords, self.threshold)
         z = [atom.GetAtomicNum() for atom in mol_FLP.GetAtoms()]
 
         H_a, H_b = get_H2_pos(z, crd_B, crd_N, cm, coords, self.verb)
@@ -314,12 +315,12 @@ class IFLP:
                 )
             raise ValueError("Fail to generate H positions")
         else:
-            init_xyz_path = os.path.join(self.save_folder, f"/initial_FLP/{self.label}.xyz")
+            init_xyz_path = os.path.join(self.save_folder, f"initial_FLP/{self.label}.xyz")
             rdmolfiles.MolToXYZFile(mol_FLP, init_xyz_path)
 
             opt_flp_path = xtb_opt_(init_xyz_path, self.save_folder, charge=0)
 
-            E_iflp = get_dft_E(opt_flp_path, self.label)
+            #E_iflp = get_dft_E(opt_flp_path, self.label)
 
             ha_pos = f"H {H_a[0]:13.6f}{H_a[1]:12.6f}{H_a[2]:12.6f}\n"
             hb_pos = f"H {H_b[0]:13.6f}{H_b[1]:12.6f}{H_b[2]:12.6f}"
@@ -366,9 +367,6 @@ class IFLP:
                     )
                 raise ValueError("Fail to generate relaxed FLP-BH")
 
-            E_iflp_b = get_dft_E(opt_BH_path, self.label, charge=-1)
-            feha = (E_iflp_b - E_iflp - E_HYDRIDE) * h2kcal
-
             # FEPA
             contents_b.append(hb_pos)
             contents_b[0] = str(len(contents_b[2:])) + "\n"
@@ -392,8 +390,12 @@ class IFLP:
                     )
                 raise ValueError("Fail to generate relaxed FLP-NH")
 
-            E_iflp_n = get_dft_E(opt_NH_path, self.label, charge=1)
-            fepa = (E_iflp_n - E_iflp - E_PROTON) * h2kcal
+            #E_iflp_b = get_dft_E(opt_BH_path, self.label, charge=-1)
+            #feha = (E_iflp_b - E_iflp - E_HYDRIDE) * h2kcal
+
+            #E_iflp_n = get_dft_E(opt_NH_path, self.label, charge=1)
+            #fepa = (E_iflp_n - E_iflp - E_PROTON) * h2kcal
+            fepa, feha = 0, 0
         return fepa, feha
 
     def geom_targets(self) -> List[float]:
@@ -409,14 +411,13 @@ class IFLP:
         """
         try:
             mol_relaxed = Chem.MolFromXYZFile(self.mol_relaxed_xyz)
-            dist_matrix = Get3DDistanceMatrix(mol_relaxed)
             cm = Chem.rdmolops.GetAdjacencyMatrix(mol_relaxed)
 
             conf = mol_relaxed.GetConformer()
             coords = conf.GetPositions()
 
             best_dist, crd_B, crd_N = get_shortest_BN_distance(
-                mol_relaxed, dist_matrix, self.threshold
+                mol_relaxed, coords, self.threshold
             )
             eta = calculate_angle(crd_B, crd_N, cm, coords, self.verb)
             return best_dist, eta
