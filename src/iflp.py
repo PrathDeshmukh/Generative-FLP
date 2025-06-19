@@ -138,12 +138,12 @@ def get_shortest_BN_distance(
 
 
 def get_H2_pos(
-    z: List[int],
-    crd_B: int,
-    crd_N: int,
-    cm: np.ndarray,
-    coords: np.ndarray,
-    verb: int = 0,
+        z: List[int],
+        crd_B: int,
+        crd_N: int,
+        cm: np.ndarray,
+        coords: np.ndarray,
+        verb: int = 0,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Determine cartesian coodinates to which hydride and proton are to be added.
@@ -172,6 +172,7 @@ def get_H2_pos(
         for n, j in enumerate(cm[crd_N, :])
         if j == 1 and z[n] != 5
     ]
+
     if len(subs_base) == 2:
         if verb > 1:
             print("Detect sp2 nitrogen\n")
@@ -179,41 +180,36 @@ def get_H2_pos(
         points = Points(subs_base)
         try:
             centroid = points.centroid()
-        except ValueError:
-            if verb > 0:
-                print("Cannot calculate centroid. return None")
-            return None, None
-        vec_b = np.array(coords[crd_N, :]) - centroid
-    elif len(subs_base) == 3:
-        if verb > 1:
-            print("Detect sp3 nitrogen\n")
-        points = Points(subs_base)
-        try:
-            centroid = points.centroid()
+            vec_b = np.array(coords[crd_N, :]) - centroid
         except ValueError:
             if verb > 0:
                 print("Cannot calculate centroid. return None")
             return None, None
 
-        if distance.euclidean(centroid, coords[crd_N, :]) < 0.1:
-            try:
-                plane = Plane.best_fit(points)
-                n1 = plane.normal
-                n2 = -n1
-                H_b1 = n1 * 1.2
-                H_b2 = n2 * 1.2
-                d1 = distance.euclidean(H_b1, coords[crd_B, :])
-                d2 = distance.euclidean(H_b2, coords[crd_B, :])
-                if d1 < d2:
-                    vec_b = H_b1
-                else:
-                    vec_b = H_b2
-            except ValueError:
-                if verb > 0:
-                    print("Cannot determine the base vector. return None")
-                return None, None
-        else:
-            vec_b = np.array(coords[crd_N, :]) - centroid
+    elif len(subs_base) == 3:
+        if verb > 1:
+            print("Detect sp3 nitrogen\n")
+        points = Points(subs_base)
+
+        try:
+            plane = Plane.best_fit(points)
+            n1 = plane.normal
+            n2 = -n1
+            H_b1 = n1 * 1.2
+            H_b2 = n2 * 1.2
+            d1 = distance.euclidean(H_b1, coords[crd_B, :])
+            d2 = distance.euclidean(H_b2, coords[crd_B, :])
+            if d1 < d2:
+                vec_b = H_b1
+            else:
+                vec_b = H_b2
+
+
+        except ValueError:
+            if verb > 0:
+                print("Cannot determine the base vector. return None")
+            return None, None
+
     else:
         print(
             f"Base substituents are not 2 or 3 but rather {len(subs_base)} return None"
@@ -257,8 +253,10 @@ def get_H2_pos(
     else:
         print("Acid substituents are not 3!")
         return None, None
+
     vec_a = unit_vector(vec_a)
     H_a = vec_a * 1.2 + coords[crd_B, :]
+
     return H_a, H_b
 
 
