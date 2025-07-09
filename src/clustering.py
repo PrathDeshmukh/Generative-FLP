@@ -1,30 +1,27 @@
-import os
-import argparse
-from utils.utils import calcfps, calcIntDiv
+from traceback import print_tb
 
-#Calculate internal diversity first then plot clustering
+from sklearn.cluster import KMeans
+from sklearn.metrics import pairwise_distances_argmin_min
+from utils import calcfps
+import pandas as pd
 
-def parse_cmd():
-    parser = argparse.ArgumentParser(description="Calculate internal diversity of datasets")
+path = "./assembled_FLP.csv"
+df = pd.read_csv(path)
+smiles = df['SMILES']
 
-    parser.add_argument(
-        "--file_paths",
-        nargs='*'
-    )
+fps = calcfps(dataset=path)
 
-    return parser.parse_args()
+kmeans = KMeans(n_clusters=50, random_state=42).fit(fps)
 
-cmd_args = parse_cmd()
-file_paths = cmd_args.file_paths
-div_dict = {}
+cluster_ctrs = kmeans.cluster_centers_
 
-for file in file_paths:
-    fname = os.path.basename(file).split('.')[0]
-    fps_list = calcfps(file, bitVectObj=True)
-    div = calcIntDiv(fps_list)
-    div_dict[fname] = div
-    print(f"Internal diversity of {fname} dataset: {div:.3f}")
+closest_idx, _ = pairwise_distances_argmin_min(cluster_ctrs, fps)
+print(f"Number of cluster centers {len(closest_idx)}")
 
-with open('Generative-FLP/data/plots/internal_diversity.txt', 'w') as f:
-    for fname, div in div_dict.items():
-        f.write(f"{fname}: {div:.3f} \n")
+cluster_ctr_smiles = {'SMILES':[]}
+
+for idx in closest_idx:
+    cluster_ctr_smiles['SMILES'].append(smiles[idx])
+
+cluster_smiles_df = pd.DataFrame(cluster_ctr_smiles)
+cluster_smiles_df.to_csv('./cluster_center_smiles.csv')
