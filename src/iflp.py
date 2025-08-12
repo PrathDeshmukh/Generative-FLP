@@ -52,9 +52,16 @@ class IFLP:
         h2kcal = 627.509
 
         mol_FLP = Chem.AddHs(mol_FLP)
-        AllChem.EmbedMolecule(mol_FLP)
-
-        conf = mol_FLP.GetConformer()
+        # Generate minimum energy conformer
+        mol_FLP = dm.conformers.generate(
+            mol_FLP,
+            add_hs=False,
+            minimize_energy=True,
+            sort_by_energy=True,
+            method="ETKDG",
+            forcefield="UFF"
+        )
+        conf = mol_FLP.GetConformer(0)
         coords = conf.GetPositions()
 
         cm = Chem.rdmolops.GetAdjacencyMatrix(mol_FLP)
@@ -142,14 +149,8 @@ class IFLP:
                     )
                 raise ValueError("Fail to generate relaxed FLP-NH")
 
-            #E_iflp = get_dft_E(opt_flp_path, self.label)
-
-            #E_iflp_b = get_dft_E(opt_BH_path, self.label, charge=-1)
-            #feha = (E_iflp_b - E_iflp - E_HYDRIDE) * h2kcal
-
-            #E_iflp_n = get_dft_E(opt_NH_path, self.label, charge=1)
-            #fepa = (E_iflp_n - E_iflp - E_PROTON) * h2kcal
-            fepa, feha = 0, 0
+            fepa = (energy_NH - energy_flp - E_PROTON) * h2kcal
+            feha = (energy_BH - energy_flp - E_HYDRIDE) * h2kcal
         return fepa, feha
 
     def geom_targets(self) -> Tuple[float, float]:
@@ -199,30 +200,55 @@ def compute_desc(smiles, label):
     except Exception as e:
         print(f"Exception {e} in SMILES {smiles}")
 
+def compute_dft(label):
+    save_folder = "/home/ppdeshmu/Generative-FLP/data"
+    save_csv = "/home/ppdeshmu/Generative-FLP/data/csv/fepa_feha.csv"
+    E_HYDRIDE = -0.527751
+    h2kcal = 627.509
+
+    opt_flp_path = os.path.join(save_folder, f"xyz/xtb_optimized/{label}.xyz")
+    E_iflp = get_dft_E(opt_flp_path,label)
+
+    opt_BH_path = os.path.join(save_folder, f"xyz/xtb_optimized/FLP_BH_{label}.xyz")
+    E_iflp_b = get_dft_E(opt_BH_path, label, charge=-1)
+    feha = (E_iflp_b - E_iflp - E_HYDRIDE) * h2kcal
+
+    opt_NH_path = os.path.join(save_folder, f"xyz/xtb_optimized/FLP_NH_{label}.xyz")
+    E_iflp_n = get_dft_E(opt_NH_path, label, charge=1)
+    fepa = (E_iflp_n - E_iflp) * h2kcal
+
+    with open(save_csv, 'a') as f:
+        writer_ = csv.writer(f)
+        writer_.writerow([label, E_iflp,fepa, feha])
+    f.close()
+
+
 if __name__ == "__main__":
-    csv_path = "/home/ppdeshmu/Generative-FLP/data/csv/assembled_FLP.csv"
+
+    csv_path = "/home/ppdeshmu/Generative-FLP/data/csv/FLP_geom_desc.csv"
     df = pd.read_csv(csv_path)
 
-    desc_csv = '/home/ppdeshmu/Generative-FLP/data/csv/FLP_dataset.csv'
+    desc_csv = '/home/ppdeshmu/Generative-FLP/data/csv/fepa_feha.csv'
 
-    header_row = ['label', 'fepa', 'feha', 'd', 'phi']
+    header_row = ['label', 'E_iflp', 'fepa', 'feha']
     with open(desc_csv, 'w') as f:
       writer = csv.writer(f)
       writer.writerow(header_row)
       f.close()
 
-    smi = df['SMILES'].to_list()
+    labels = df['label'].to_list()
+    print(f"Attempting DFT calculations for {len(labels)} molecules")
 
-    labels = range(len(smi))
+    labels_0_to_1K = labels[0:1001]
 
     executor = submitit.AutoExecutor(folder='/home/ppdeshmu/scratch')
 
     if executor._executor.__class__.__name__ == 'SlurmExecutor':
         executor.update_parameters(
-            cpus_per_task = 12,
+            cpus_per_task = 16,
             tasks_per_node = 1,
             slurm_nodes = 1,
             slurm_time = "24:00:00"
         )
 
-    jobs = executor.map_array(compute_desc, smi, labels)
+    jobs = executor.map_array(compute_dft, labels_0_to_1K)
