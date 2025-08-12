@@ -38,9 +38,9 @@ def get_dft_E(xyz, label, charge:int = 0):
     elif charge == -1:
         label_type = "FEHA"
 
-    calc_opt = Gaussian(mem='28GB',
-                        nprocshared=12,
-                        label=os.path.join('/home/ppdeshmu/scratch/', f"{label_type}_{label}"),
+    calc_opt = Gaussian(mem='16GB',
+                        nprocshared=16,
+                        label=os.path.join('/home/ppdeshmu/scratch_lincorr/', f"{label_type}_{label}"),
                         xc='PBE1PBE',
                         basis='def2TZVP',
                         command='g16 < PREFIX.com> PREFIX.log',
@@ -99,6 +99,21 @@ def xtb_opt_(xyz, save_folder, charge: int):
     save_path = os.path.join(save_folder, f"xtb_optimized/{filename}")
     atoms.write(save_path)
     return save_path
+    
+def xtb_opt_cli(xyz, save_folder, charge: int):
+    filename = os.path.basename(xyz)
+    subprocess.run(["xtb", f"{xyz}", "--opt", "vtight", "--chrg", f"{charge}"])
+
+    save_path = os.path.join(save_folder, f"xtb_optimized_vtight/{filename}")
+    dirname = os.getcwd()
+    os.rename(os.path.join(dirname, "xtbopt.xyz"), save_path)
+
+    with open(save_path, "r") as file:
+        for line in file:
+            match = re.search(r"energy:\s+([-+]?\d*\.\d+)", line)
+            if match:
+                pe = float(match.group(1))
+    return save_path, pe
 
 def get_lewis_h_dist(xyz, lewis_idx):
     atoms = read(xyz)
