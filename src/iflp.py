@@ -10,7 +10,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdmolfiles
 
 from ase.io import read
-from calc_utils import get_shortest_BN_distance, get_H2_pos, get_dft_E, xtb_opt_, get_lewis_h_dist, angle_between, calc_directed_vector
+from calc_utils import get_shortest_BN_distance, get_H2_pos, get_dft_E, xtb_opt_cli, get_lewis_h_dist, angle_between, calc_directed_vector
 
 
 class IFLP:
@@ -87,7 +87,7 @@ class IFLP:
             init_xyz_path = os.path.join(self.save_folder, f"initial_FLP/{self.label}.xyz")
             rdmolfiles.MolToXYZFile(mol_FLP, init_xyz_path)
 
-            opt_flp_path = xtb_opt_(init_xyz_path, self.save_folder, charge=0)
+            opt_flp_path = xtb_opt_cli(init_xyz_path, self.save_folder, charge=0)
 
             ha_pos = f"H {H_a[0]:13.6f}{H_a[1]:12.6f}{H_a[2]:12.6f}\n"
             hb_pos = f"H {H_b[0]:13.6f}{H_b[1]:12.6f}{H_b[2]:12.6f}"
@@ -107,7 +107,7 @@ class IFLP:
                 contents_c[0] = str(len(contents_c[2:])) + "\n"
                 f.writelines(contents_c)
 
-            opt_flp_h2_path = xtb_opt_(flp_h2_path, self.save_folder, charge=0)
+            opt_flp_h2_path = xtb_opt_cli(flp_h2_path, self.save_folder, charge=0)
             self.mol_relaxed_xyz = opt_flp_h2_path
 
             # FEHA
@@ -119,7 +119,7 @@ class IFLP:
             with open(flp_BH_path, "w") as f:
                 f.writelines(contents)
 
-            opt_BH_path = xtb_opt_(flp_BH_path, self.save_folder, charge=-1)
+            opt_BH_path = xtb_opt_cli(flp_BH_path, self.save_folder, charge=-1)
 
             d_bh = get_lewis_h_dist(opt_BH_path, B_idx)
 
@@ -139,7 +139,7 @@ class IFLP:
             with open(flp_NH_path, "w") as f:
                 f.writelines(contents_b)
 
-            opt_NH_path = xtb_opt_(flp_NH_path, self.save_folder, charge=1)
+            opt_NH_path = xtb_opt_cli(flp_NH_path, self.save_folder, charge=1)
 
             d_nh = get_lewis_h_dist(opt_NH_path, N_idx)
             if d_nh > 1.5:
